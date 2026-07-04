@@ -29,8 +29,8 @@ class Novel:
         self.link = link
         if self.link[-1] == "/":
             self.link = self.link[:-1]
-        self.page = BeautifulSoup(SyosetuRequest(link).getPage(), 'html.parser')
-        self.seriesCode = link.split(".syosetu.com/", 1)[1]
+        self.page = BeautifulSoup(SyosetuRequest(self.link).getPage(), 'html.parser')
+        self.seriesCode = self.link.split(".syosetu.com/", 1)[1]
 
         # get TOC page count
         self.tocPageCount = 1
@@ -138,8 +138,13 @@ class Novel:
             if i < min_chapter - 1 or i > max_chapter - 1:
                 continue
             
-            print(f"Downloading chapter {i + 1}/{max_chapter}")
-            thisChapter = BeautifulSoup(SyosetuRequest(self.link + "/" + str(i+1)).getPage(), 'html.parser')
+            cache_dir = os.path.join(__location__, "books", "cache", self.seriesCode)
+            cache_path = os.path.join(cache_dir, f"{i + 1}.html")
+            if os.path.exists(cache_path):
+                print(f"Reading chapter {i + 1}/{max_chapter} from cache")
+            else:
+                print(f"Downloading chapter {i + 1}/{max_chapter}")
+            thisChapter = BeautifulSoup(SyosetuRequest(self.link + "/" + str(i+1), cache_path=cache_path).getPage(), 'html.parser')
             title = thisChapter.find(class_="p-novel__title").text
             title = escape(title)
             chapterText = "<h2 id=\"toc_index_1\">" + title + "</h2>\n"
@@ -165,13 +170,9 @@ class Novel:
                 output.write(finalOutput)
 
         # zip up all items and rename .zip to .epub
-        outputPath = os.path.join(cwd, self.title)
-        appendage = ""
-        i = 1
-        while os.path.isfile(outputPath + appendage + '.epub'):
-            appendage = "(" + str(i) + ")"
-            i += 1
-        outputPath = outputPath + appendage + '.epub'
+        booksDir = os.path.join(__location__, "books")
+        os.makedirs(booksDir, exist_ok=True)
+        outputPath = os.path.join(booksDir, self.title + '.epub')
 
         with zipfile.ZipFile(outputPath, 'w') as zip:
             os.chdir(os.path.join(__location__, 'files'))
@@ -188,17 +189,25 @@ class Novel:
 
 
 class SyosetuRequest:
-    def __init__(self, link: str):
+    def __init__(self, link: str, cache_path: str = None):
         self.srHeaders = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:108.0) Gecko/20100101 Firefox/108.0'
         }
         self.srCookies = dict(over18='yes')
         self.link: str = link
 
-        r = requests.get(url=self.link, headers=self.srHeaders, cookies=self.srCookies)
-        if not r.text:
-            raise Exception("Unable to get response from " + link)
-        self.page = r.text
+        if cache_path and os.path.exists(cache_path):
+            with open(cache_path, 'r', encoding='utf-8') as f:
+                self.page = f.read()
+        else:
+            r = requests.get(url=self.link, headers=self.srHeaders, cookies=self.srCookies)
+            if not r.text:
+                raise Exception("Unable to get response from " + link)
+            self.page = r.text
+            if cache_path:
+                os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+                with open(cache_path, 'w', encoding='utf-8') as f:
+                    f.write(self.page)
 
     def getPage(self) -> str:
         return self.page
