@@ -1,12 +1,17 @@
 @charset "UTF-8";
 @namespace "http://www.w3.org/1999/xhtml";
 @namespace epub "http://www.idpf.org/2007/ops";
+@page {
+  margin: 3% 4%;
+}
+
 html {
   -ms-writing-mode: tb-rl;
   -epub-writing-mode: vertical-rl;
   -webkit-writing-mode: vertical-rl;
   writing-mode: vertical-rl;
   font-family: serif, sans-serif;
+  line-height: 1.8;
 }
 
 html.horizontal {
@@ -17,6 +22,8 @@ html.horizontal {
 }
 
 body {
+  margin: 0;
+  padding: 0;
   text-align: justify;
   text-justify: inter-ideograph;
   vertical-align: baseline;
