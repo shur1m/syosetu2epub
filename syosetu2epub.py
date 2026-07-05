@@ -54,19 +54,23 @@ def list_novels():
     if not registry:
         print("No novels downloaded yet.")
         return
-    
-    print(f"{'Code':<12} | {'Cached Chs':<10} | {'Title':<45} | {'Link'}")
-    print("-" * 100)
-    for code, info in registry.items():
+
+    total = len(registry)
+    for idx, (code, info) in enumerate(registry.items(), start=1):
         title = info.get("title", "Unknown")
         link = info.get("link", "")
         cache_dir = os.path.join(__location__, "books", "cache", code)
         cached_count = 0
         if os.path.exists(cache_dir):
             cached_count = len([f for f in os.listdir(cache_dir) if f.endswith(".html")])
-        
-        display_title = title if len(title) <= 42 else title[:40] + "..."
-        print(f"{code:<12} | {cached_count:<10} | {display_title:<45} | {link}")
+
+        print(f"[{idx}/{total}] {title}")
+        print(f"  Code:     {code}")
+        print(f"  Chapters: {cached_count} cached")
+        print(f"  Link:     {link}")
+        if idx < total:
+            print()
+
 
 class Novel:
     def __init__(self, link: str):
