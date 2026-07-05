@@ -11,6 +11,8 @@ import requests
 import pytz
 from html import escape
 
+import json
+
 cwd = os.getcwd()
 __location__ = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__)))
 
@@ -19,11 +21,58 @@ horizontal_class = ''
 page_direction = 'rtl'
 min_chapter = 0
 max_chapter = 100000000
+more_chapters = None
+
+REGISTRY_PATH = os.path.join(__location__, "novels.json")
+
+def load_registry():
+    if os.path.exists(REGISTRY_PATH):
+        try:
+            with open(REGISTRY_PATH, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+def save_registry(registry):
+    try:
+        with open(REGISTRY_PATH, 'w', encoding='utf-8') as f:
+            json.dump(registry, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"Error saving registry: {e}")
+
+def register_novel(series_code, title, link):
+    registry = load_registry()
+    registry[series_code] = {
+        "title": title,
+        "link": link
+    }
+    save_registry(registry)
+
+def list_novels():
+    registry = load_registry()
+    if not registry:
+        print("No novels downloaded yet.")
+        return
+    
+    print(f"{'Code':<12} | {'Cached Chs':<10} | {'Title':<45} | {'Link'}")
+    print("-" * 100)
+    for code, info in registry.items():
+        title = info.get("title", "Unknown")
+        link = info.get("link", "")
+        cache_dir = os.path.join(__location__, "books", "cache", code)
+        cached_count = 0
+        if os.path.exists(cache_dir):
+            cached_count = len([f for f in os.listdir(cache_dir) if f.endswith(".html")])
+        
+        display_title = title if len(title) <= 42 else title[:40] + "..."
+        print(f"{code:<12} | {cached_count:<10} | {display_title:<45} | {link}")
 
 class Novel:
     def __init__(self, link: str):
         global min_chapter
         global max_chapter
+        global more_chapters
         
         self.chapterCount = 0
         self.link = link
@@ -31,6 +80,13 @@ class Novel:
             self.link = self.link[:-1]
         self.page = BeautifulSoup(SyosetuRequest(self.link).getPage(), 'html.parser')
         self.seriesCode = self.link.split(".syosetu.com/", 1)[1]
+
+        if more_chapters is not None:
+            cache_dir = os.path.join(__location__, "books", "cache", self.seriesCode)
+            cached_count = 0
+            if os.path.exists(cache_dir):
+                cached_count = len([f for f in os.listdir(cache_dir) if f.endswith(".html")])
+            max_chapter = cached_count + more_chapters
 
         # get TOC page count
         self.tocPageCount = 1
@@ -43,6 +99,9 @@ class Novel:
         self.title = "".join(c for c in self.title if c.isalnum() or c in " 【】「」").rstrip()
         self.title = escape(self.title)
         self.author = self.page.find(class_="p-novel__author").text.split('：', 1)[1]
+
+        # register novel link and title
+        register_novel(self.seriesCode, self.title, self.link + "/")
 
         self.tocInsert = ""
         self.tocInsertLegacy = ""
@@ -214,6 +273,10 @@ class SyosetuRequest:
 
 
 if __name__ == "__main__":
+    if "--list" in sys.argv or "-l" in sys.argv:
+        list_novels()
+        sys.exit(0)
+
     link: str = None
     skip_next = False
     
@@ -241,22 +304,31 @@ if __name__ == "__main__":
                 max_chapter = int(sys.argv[i + 1])
                 skip_next = True
             else:
-                print("Error: No min_chapter found after --max.")
+                print("Error: No max_chapter found after --max.")
+                os._exit(0)
+        if "--more" in arg:
+            if i + 1 < len(sys.argv) and str.isdigit(sys.argv[i + 1]):
+                more_chapters = int(sys.argv[i + 1])
+                skip_next = True
+            else:
+                print("Error: No chapter count found after --more.")
                 os._exit(0)
                 
         if arg == "-h" or arg == "--Help" or arg == "--help":
             print("USAGE: syosetu2epub https://*.syosetu.com/******")
-            print("OUTPUT: EPUB formatted ebook will be generated in current working directory")
+            print("OUTPUT: EPUB formatted ebook will be generated in books/ directory")
             print("`-c`: Syosetu.com adds large spacing between blocks of text via br tags, which may greatly reduce the amount of words per page shown. Use `-c` to enable compact mode and ignore these spacers.")
             print("`--min`: Minimum chapter to start downloading from.")
             print("`--max`: Maximum chapter to download until.")
+            print("`--more`: Downloads N additional chapters relative to the current cache size.")
+            print("`--list` / `-l`: Lists already downloaded novels and cached chapter counts.")
             print("`--horizontal`: Displays text horizontally instead of vertically. Scrolling between pages will also be from left to right instead of right to left.")
             os._exit(0)
 
     if link == None:
         print("USAGE: syosetu2epub https://*.syosetu.com/******")
         print("HELP: syosetu2epub -h")
-        print("OUTPUT: EPUB formatted ebook will be generated in current working directory")
+        print("OUTPUT: EPUB formatted ebook will be generated in books/ directory")
         os._exit(0)
 
     print("Downloading and building ebook. This may take a while depending on number of chapters and images")
