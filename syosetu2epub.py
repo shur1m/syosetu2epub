@@ -264,6 +264,8 @@ class SyosetuRequest:
                 self.page = f.read()
         else:
             r = requests.get(url=self.link, headers=self.srHeaders, cookies=self.srCookies)
+            if not r.ok:
+                raise Exception(f"HTTP {r.status_code} error fetching {link}. Aborting to keep cache intact.")
             if not r.text:
                 raise Exception("Unable to get response from " + link)
             self.page = r.text
